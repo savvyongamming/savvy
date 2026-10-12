@@ -120,6 +120,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline
 .rank li.go{cursor:pointer}
 .rank li.go:hover{border-color:var(--accent)}
 .rank li button.nm{background:none;border:0;padding:0;text-align:left;font:inherit}
+.idcard{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--surface);border:1.5px solid var(--accent);border-radius:12px;padding:12px 14px}
+.idcard b{font-size:1.1rem;overflow-wrap:anywhere}
 .upd{position:sticky;top:8px;z-index:5;max-width:640px;margin:0 auto 12px;background:var(--accent);color:var(--accent-fg);border-radius:12px;padding:10px 14px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .upd button{background:var(--accent-fg);color:var(--accent);border:0;border-radius:8px;padding:8px 14px;font-weight:600}
 @media (prefers-reduced-motion:no-preference){.fill{transition:width .8s ease}}
@@ -141,15 +143,20 @@ const BANK={"mat":{"n":"Matemática","d":"Contas, geometria e cálculo","q":[[1,
 
 /* modo: [nome, descrição, perguntas por tema, erros permitidos antes de sair do tema] */
 const MODES={4:['Fácil','5 fáceis + 1 média · 4 vidas',6,4],7:['Médio','10 médias + 5 difíceis · 3 vidas',15,3],10:['Difícil','16 difíceis + 4 de especialista · 2 vidas',20,2]};
-const MAX_PICK=5, SEEN_KEY='qvs_seen_v2', BUILD='487df3e';
+const MAX_PICK=5, SEEN_KEY='qvs_seen_v2', BUILD='a5b9c3e';
 /* Dificuldade planejada (1-10) de cada pergunta, sempre subindo. */
 const lin=(a,b,n)=>Array.from({length:n},(_,i)=>+(a+(b-a)*i/(n-1)).toFixed(2));
 const PLANS={4:[...lin(1,3,5),5],7:[...lin(4,6,10),...lin(7,8.5,5)],10:[...lin(7,8.5,16),9,9.5,10,10]};
 const lvlName=g=>g<4?'Fácil':g<7?'Médio':g<9?'Difícil':'Especialista';
 const $=s=>document.querySelector(s), app=$('#app');
-let picked=[], mode=7, filter='', S=null, seen=new Set(), P={name:'',age:''}, RK={}, rkTok=0;
+let picked=[], mode=7, filter='', S=null, seen=new Set(), P={name:'',age:'',username:'',token:'',confirmed:false}, RK={}, rkTok=0;
 try{P=Object.assign(P,JSON.parse(localStorage.getItem('savvy_profile')||'{}'))}catch(e){}
-const validProfile=()=>(P.name||'').trim().length>=2&&+P.age>=6&&+P.age<=110;
+const newToken=()=>{try{const a=new Uint8Array(24);crypto.getRandomValues(a);return [...a].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){return (Math.random().toString(36).slice(2)+Date.now().toString(36)+Math.random().toString(36).slice(2)).padEnd(32,'x')}};
+if(!P.token||P.token.length<16)P.token=newToken();
+const saveProfile=()=>{try{localStorage.setItem('savvy_profile',JSON.stringify(P))}catch(e){}};saveProfile();
+const validProfile=()=>!!(P.confirmed&&P.username);
+const UNK='USUARIODESCONHECIDO';
+const who=(n,a)=>[n&&n!=='Sem nome'?n:'',a?a+' anos':''].filter(Boolean).join(' · ');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* Tema claro/escuro */
@@ -167,6 +174,43 @@ const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(M
 const toast=m=>{const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,3200)};
 const norm=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 
+function idBox(){
+  const b=$('#idbox');
+  if(P.confirmed){
+    b.innerHTML=`<div class="idcard"><div><b>@${esc(P.username)}</b><br><span class="muted small">${esc(who(P.name,P.age)||'Sem nome nem idade informados')}</span></div><button class="btn ghost" id="idedit">Alterar</button></div>`;
+    $('#idedit').onclick=()=>{P.confirmed=false;saveProfile();home()};return}
+  b.innerHTML=`<input class="field" id="puser" maxlength="20" placeholder="Username único (ex.: joao_77)" autocomplete="username" autocapitalize="none" aria-label="Username"><div class="profile" style="margin-top:8px"><input class="field" id="pname" maxlength="24" placeholder="Nome (pode repetir)" autocomplete="nickname" aria-label="Nome"><input class="field" id="page" type="number" inputmode="numeric" min="6" max="110" placeholder="Idade" aria-label="Idade"></div>
+  <p class="muted small" style="margin-top:8px">O username é só seu e não pode repetir. Nome e idade podem. Se deixar o username em branco, você joga como ${UNK} + um número.</p>
+  <div class="actions" style="margin-top:8px"><button class="btn" id="idok">Confirmar identificação</button></div><p class="small" id="idmsg" role="status"></p>`;
+  $('#puser').value=P.username&&!P.username.startsWith(UNK)?P.username:'';$('#pname').value=P.name||'';$('#page').value=P.age||'';
+  $('#idok').onclick=confirmId;
+}
+async function confirmId(){
+  const u=$('#puser').value.trim(), n=$('#pname').value.trim(), a=$('#page').value.trim(), msg=m=>{$('#idmsg').textContent=m};
+  if(n&&n.length<2)return msg('O nome precisa ter pelo menos 2 letras.');
+  if(a&&!(+a>=6&&+a<=110))return msg('A idade deve estar entre 6 e 110.');
+  if(u&&!/^[A-Za-z0-9_.-]{3,20}$/.test(u))return msg('Username: de 3 a 20 caracteres, só letras, números, _ . e -');
+  if(/^usuariodesconhecido/i.test(u))return msg('Esse tipo de username é reservado.');
+  $('#idok').disabled=true;msg('Confirmando…');
+  const r=await registerPlayer(u,n,a);
+  if(r.err){$('#idok').disabled=false;return msg(r.err)}
+  P={...P,username:r.username,name:n,age:a,confirmed:true};saveProfile();toast('Identificação confirmada: '+r.username);home();
+}
+async function registerPlayer(u,n,a){
+  if(online){
+    try{
+      const r=await fetch(CFG.supabaseUrl.replace(/\/$/,'')+'/rest/v1/rpc/register_player',{method:'POST',headers:hdr(),body:JSON.stringify({p_username:u||null,p_name:n||null,p_age:a?+a:null,p_token:P.token})});
+      if(r.ok)return{username:await r.json()};
+      const e=await r.json().catch(()=>({}));
+      if(/username_taken/.test(e.message||''))return{err:'Esse username já está em uso. Escolha outro.'};
+      return{err:'Não foi possível confirmar agora. Tente de novo.'};
+    }catch(e){return{err:'Sem conexão com o servidor. Tente de novo.'}}
+  }
+  if(u)return{username:u};
+  if(P.username&&P.username.startsWith(UNK))return{username:P.username};
+  let c=0;try{c=+localStorage.getItem('savvy_unk')||0}catch(e){}c++;try{localStorage.setItem('savvy_unk',c)}catch(e){}
+  return{username:UNK+c};
+}
 function home(){
   S=null;
   app.innerHTML=`
@@ -175,8 +219,7 @@ function home(){
   <h2>Quanto você sabe do que diz gostar?</h2>
   <p class="muted">Escolha a profundidade e até ${MAX_PICK} temas. As perguntas vêm misturadas e cada uma é mais difícil que a anterior. No Difícil, as 4 últimas de cada tema são nível especialista, quase impossíveis. Cada erro custa uma vida do tema, e sem vidas ele sai da rodada. No fim, você vê a porcentagem de cada assunto.</p>
   <div class="eyebrow">Quem está jogando?</div>
-  <div class="profile"><input class="field" id="pname" maxlength="24" placeholder="Seu nome ou apelido" autocomplete="nickname" aria-label="Nome ou apelido"><input class="field" id="page" type="number" inputmode="numeric" min="6" max="110" placeholder="Idade" aria-label="Idade"></div>
-  <p class="muted small">Seu nome e sua idade aparecem no ranking. Use um apelido se preferir.</p>
+  <div id="idbox"></div>
   <div class="eyebrow">Até qual nível você quer chegar?</div>
   <div class="modes" id="modes"></div>
   <div class="bar-top"><span class="eyebrow">Temas</span><span class="mono" id="cnt"></span></div>
@@ -190,9 +233,7 @@ function home(){
     const b=document.createElement('button');b.className='mode';b.dataset.n=n;
     b.innerHTML=`<b>${t}</b><span>${d}</span>`;
     b.onclick=()=>{mode=+n;paint()};m.appendChild(b)});
-  $('#pname').value=P.name||'';$('#page').value=P.age||'';
-  const saveP=()=>{P={name:$('#pname').value,age:$('#page').value};try{localStorage.setItem('savvy_profile',JSON.stringify(P))}catch(e){}paint()};
-  $('#pname').oninput=saveP;$('#page').oninput=saveP;
+  idBox();
   syncTop();
   $('#search').value=filter;
   $('#search').oninput=e=>{filter=e.target.value;grid()};
@@ -215,7 +256,7 @@ function paint(){
   document.querySelectorAll('.cat').forEach(b=>{const on=picked.includes(b.dataset.k);b.setAttribute('aria-pressed',on);b.disabled=!on&&picked.length>=MAX_PICK});
   document.querySelectorAll('.mode').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.n===mode));
   $('#cnt').textContent=`${picked.length}/${MAX_PICK}`;$('#go').disabled=!picked.length||!validProfile();
-  $('#go').textContent=validProfile()?'Começar':'Preencha nome e idade para começar';
+  $('#go').textContent=validProfile()?'Começar':'Confirme sua identificação para começar';
 }
 
 function start(){
@@ -315,7 +356,7 @@ function result(){
   S.finished=true;syncTop();
   $('#rk').onclick=()=>ranking({tab:'assunto',k:sorted[0],m:mode});
   if(!S.submitted){S.submitted=true;
-    const rows=ks.map(k=>({name:P.name.trim(),age:+P.age,topic:k,mode,pct:pct(k),title:titleFor(k,pct(k))}));
+    const rows=ks.map(k=>({topic:k,mode,pct:pct(k),title:titleFor(k,pct(k))}));
     submitScores(rows).then(st=>{const el=$('#sync');if(el)el.textContent=st==='online'?'Pontuação enviada ao ranking online.':st==='local'?'Pontuação salva neste aparelho. O ranking online ainda não foi ligado.':'Não foi possível enviar ao ranking online agora.'})}
   else $('#sync').textContent='Pontuação já registrada no ranking.';
   requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelectorAll('.fill').forEach(f=>f.style.width=f.dataset.w+'%')));
@@ -332,9 +373,9 @@ const CFG=window.SAVVY_CONFIG||{}, online=!!(CFG.supabaseUrl&&CFG.supabaseKey);
 const tbl=()=>CFG.supabaseUrl.replace(/\/$/,'')+'/rest/v1/scores';
 const hdr=()=>{const h={apikey:CFG.supabaseKey,'Content-Type':'application/json'};if(CFG.supabaseKey.startsWith('eyJ'))h.Authorization='Bearer '+CFG.supabaseKey;return h};
 async function submitScores(rows){
-  if(online){try{const r=await fetch(tbl(),{method:'POST',headers:{...hdr(),Prefer:'return=minimal'},body:JSON.stringify(rows)});return r.ok?'online':'erro'}catch(e){return 'erro'}}
+  if(online){try{const r=await fetch(CFG.supabaseUrl.replace(/\/$/,'')+'/rest/v1/rpc/submit_scores',{method:'POST',headers:hdr(),body:JSON.stringify({p_username:P.username,p_token:P.token,p_rows:rows})});return r.ok?'online':'erro'}catch(e){return 'erro'}}
   try{const a=JSON.parse(localStorage.getItem('savvy_local_scores')||'[]');const now=new Date().toISOString();
-    localStorage.setItem('savvy_local_scores',JSON.stringify(a.concat(rows.map(r=>({...r,created_at:now})))));return 'local'}catch(e){return 'erro'}
+    localStorage.setItem('savvy_local_scores',JSON.stringify(a.concat(rows.map(r=>({...r,username:P.username,name:P.name||'Sem nome',age:P.age?+P.age:null,created_at:now})))));return 'local'}catch(e){return 'erro'}
 }
 
 const W={4:.4,7:.7,10:1}, MN={4:'Fácil',7:'Médio',10:'Difícil'};
@@ -352,9 +393,9 @@ async function fetchRows(force){
 function aggregate(rows){
   const m=new Map();
   for(const r of rows){
-    const key=String(r.name).trim().toLowerCase();if(!key||!BANK[r.topic]||!W[r.mode])continue;
-    let p=m.get(key);if(!p){p={key,name:String(r.name).trim(),age:r.age,last:r.created_at,rounds:0,t:new Map()};m.set(key,p)}
-    if(r.created_at>p.last){p.last=r.created_at;p.age=r.age;p.name=String(r.name).trim()}
+    const un=String(r.username||r.name||'').trim(),key=un.toLowerCase();if(!key||!BANK[r.topic]||!W[r.mode])continue;
+    let p=m.get(key);if(!p){p={key,user:un,name:String(r.name||'').trim(),age:r.age,last:r.created_at,rounds:0,t:new Map()};m.set(key,p)}
+    if(r.created_at>p.last){p.last=r.created_at;p.age=r.age;p.name=String(r.name||'').trim();p.user=un}
     p.rounds++;
     let t=p.t.get(r.topic);if(!t){t={topic:r.topic,s:0,title:'',best:{},tm:{},rounds:0};p.t.set(r.topic,t)}
     t.rounds++;
@@ -384,18 +425,18 @@ async function ranking(o){
   let players;
   try{players=aggregate(await fetchRows());if(tok!==rkTok)return}catch(e){if(tok===rkTok)$('#board').textContent='Não foi possível carregar o ranking agora.';return}
   RK.players=players;
-  const me=(P.name||'').trim().toLowerCase();
+  const me=(P.username||'').toLowerCase();
   const openP=key=>profile(key);
   const bindRows=()=>document.querySelectorAll('#board li.go').forEach(li=>li.onclick=()=>openP(li.dataset.k));
   if(tab==='geral'){
     const draw=()=>{
       const q=norm((RK.q||'').trim());
-      const list=players.slice().sort((a,b)=>b.points-a.points||b.topics.length-a.topics.length||a.name.localeCompare(b.name)).map((p,i)=>({p,i:i+1})).filter(x=>!q||norm(x.p.name).includes(q));
-      $('#list').innerHTML=list.length?`<ol class="rank">${list.slice(0,RK.lim||50).map(({p,i})=>`<li class="go ${p.key===me?'me':''}" data-k="${esc(p.key)}"><span class="pos mono">${i}</span><span class="nm"><button class="nm"><b>${esc(p.name)}</b></button> <small class="muted">${esc(p.age)} anos · ${p.topics.length} tema${p.topics.length===1?'':'s'}</small></span><span class="badge">${esc(p.topics[0]?pname(p.topics[0].topic):'')}</span><span class="mono">${p.points}</span></li>`).join('')}</ol>${list.length>(RK.lim||50)?'<div class="actions"><button class="btn ghost" id="more">Mostrar mais</button></div>':''}`:'<p class="muted">Nenhum jogador encontrado.</p>';
+      const list=players.slice().sort((a,b)=>b.points-a.points||b.topics.length-a.topics.length||a.user.localeCompare(b.user)).map((p,i)=>({p,i:i+1})).filter(x=>!q||norm(x.p.user).includes(q)||norm(x.p.name).includes(q));
+      $('#list').innerHTML=list.length?`<ol class="rank">${list.slice(0,RK.lim||50).map(({p,i})=>`<li class="go ${p.key===me?'me':''}" data-k="${esc(p.key)}"><span class="pos mono">${i}</span><span class="nm"><button class="nm"><b>@${esc(p.user)}</b></button> <small class="muted">${esc(who(p.name,p.age))}${who(p.name,p.age)?' · ':''}${p.topics.length} tema${p.topics.length===1?'':'s'}</small></span><span class="badge">${esc(p.topics[0]?pname(p.topics[0].topic):'')}</span><span class="mono">${p.points}</span></li>`).join('')}</ol>${list.length>(RK.lim||50)?'<div class="actions"><button class="btn ghost" id="more">Mostrar mais</button></div>':''}`:'<p class="muted">Nenhum jogador encontrado.</p>';
       bindRows();const mo=$('#more');if(mo)mo.onclick=()=>{RK.lim=(RK.lim||50)+50;draw()};
     };
     $('#board').className='';
-    $('#board').innerHTML=`<p class="muted small">Pontos = soma do seu melhor resultado em cada tema (Fácil vale 40%, Médio 70% e Difícil 100%). ${players.length} jogador${players.length===1?'':'es'}. Toque em um nome para ver o perfil.</p><input class="search" id="rq" type="search" placeholder="Buscar jogador" aria-label="Buscar jogador" autocomplete="off" value="${esc(RK.q||'')}"><div id="list" style="margin-top:12px"></div>`;
+    $('#board').innerHTML=`<p class="muted small">Pontos = soma do seu melhor resultado em cada tema (Fácil vale 40%, Médio 70% e Difícil 100%). ${players.length} jogador${players.length===1?'':'es'}. Toque em um nome para ver o perfil.</p><input class="search" id="rq" type="search" placeholder="Buscar por username ou nome" aria-label="Buscar jogador" autocomplete="off" value="${esc(RK.q||'')}"><div id="list" style="margin-top:12px"></div>`;
     $('#rq').oninput=e=>{RK.q=e.target.value;RK.lim=50;draw()};draw();
   }else{
     const k=RK.k,m=RK.m;
@@ -404,7 +445,7 @@ async function ranking(o){
     $('#board').innerHTML=`<p class="muted small">Quem é bom em cada assunto. Escolha o tema e, se quiser, um nível específico. "Todos" combina os níveis (Fácil 40%, Médio 70%, Difícil 100%).</p>
     <select class="field" id="rk-topic" aria-label="Tema">${keys.map(x=>`<option value="${x}" ${x===k?'selected':''}>${esc(BANK[x].n)}</option>`).join('')}</select>
     <div class="modes" id="rk-modes" style="grid-template-columns:repeat(4,1fr);margin-block:10px">${[[0,'Todos'],...Object.entries(MN)].map(([n,v])=>`<button class="mode" data-n="${n}" aria-pressed="${+n===m}"><b>${v}</b></button>`).join('')}</div>
-    ${list.length?`<ol class="rank">${list.slice(0,100).map((x,i)=>`<li class="go ${x.p.key===me?'me':''}" data-k="${esc(x.p.key)}"><span class="pos mono">${i+1}</span><span class="nm"><button class="nm"><b>${esc(x.p.name)}</b></button> <small class="muted">${esc(x.p.age)} anos · ${x.t.rounds} rodada${x.t.rounds===1?'':'s'}</small></span><span class="badge">${esc(x.title)}</span><span class="mono">${x.v}%</span></li>`).join('')}</ol>`:'<p class="muted">Ninguém pontuou neste tema e nível ainda. Seja o primeiro.</p>'}`;
+    ${list.length?`<ol class="rank">${list.slice(0,100).map((x,i)=>`<li class="go ${x.p.key===me?'me':''}" data-k="${esc(x.p.key)}"><span class="pos mono">${i+1}</span><span class="nm"><button class="nm"><b>@${esc(x.p.user)}</b></button> <small class="muted">${esc(who(x.p.name,x.p.age))}${who(x.p.name,x.p.age)?' · ':''}${x.t.rounds} rodada${x.t.rounds===1?'':'s'}</small></span><span class="badge">${esc(x.title)}</span><span class="mono">${x.v}%</span></li>`).join('')}</ol>`:'<p class="muted">Ninguém pontuou neste tema e nível ainda. Seja o primeiro.</p>'}`;
     $('#rk-topic').onchange=e=>ranking({tab,k:e.target.value});
     document.querySelectorAll('#rk-modes .mode').forEach(b=>b.onclick=()=>ranking({tab,m:+b.dataset.n}));
     bindRows();
@@ -415,7 +456,7 @@ function profile(key){
   const strong=p.topics.slice(0,3);
   app.innerHTML=`
   <div class="eyebrow">Perfil do jogador</div>
-  <h2>${esc(p.name)} <small class="muted" style="font-size:.55em;font-weight:500">${esc(p.age)} anos</small></h2>
+  <h2>@${esc(p.user)}</h2><p class="muted">${esc(who(p.name,p.age)||'Sem nome nem idade informados')}</p>
   <div class="tiles"><div class="tile"><b>${p.points}</b><span>pontos no ranking geral</span></div><div class="tile"><b>${p.topics.length}</b><span>temas jogados</span></div><div class="tile"><b>${p.avg}%</b><span>média nos temas jogados</span></div><div class="tile"><b>${p.rounds}</b><span>rodadas de tema</span></div></div>
   <h3>É bom em</h3>
   <div class="chips">${strong.map(t=>`<span class="chip"><b>${esc(pname(t.topic))}</b> <span class="muted">${Math.round(t.s)}% · ${esc(t.title)}</span></span>`).join('')}</div>
