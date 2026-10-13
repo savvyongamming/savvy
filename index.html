@@ -143,7 +143,7 @@ const BANK={"mat":{"n":"Matemática","d":"Contas, geometria e cálculo","q":[[1,
 
 /* modo: [nome, descrição, perguntas por tema, erros permitidos antes de sair do tema] */
 const MODES={4:['Fácil','5 fáceis + 1 média · 4 vidas',6,4],7:['Médio','10 médias + 5 difíceis · 3 vidas',15,3],10:['Difícil','16 difíceis + 4 de especialista · 2 vidas',20,2]};
-const MAX_PICK=5, SEEN_KEY='qvs_seen_v2', BUILD='4b34ecb';
+const MAX_PICK=5, SEEN_KEY='qvs_seen_v2', BUILD='7f84703';
 /* Dificuldade planejada (1-10) de cada pergunta, sempre subindo. */
 const lin=(a,b,n)=>Array.from({length:n},(_,i)=>+(a+(b-a)*i/(n-1)).toFixed(2));
 const PLANS={4:[...lin(1,3,5),5],7:[...lin(4,6,10),...lin(7,8.5,5)],10:[...lin(7,8.5,16),9,9.5,10,10]};
@@ -154,7 +154,7 @@ try{P=Object.assign(P,JSON.parse(localStorage.getItem('savvy_profile')||'{}'))}c
 const newToken=()=>{try{const a=new Uint8Array(24);crypto.getRandomValues(a);return [...a].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){return (Math.random().toString(36).slice(2)+Date.now().toString(36)+Math.random().toString(36).slice(2)).padEnd(32,'x')}};
 if(!P.token||P.token.length<16)P.token=newToken();
 const saveProfile=()=>{try{localStorage.setItem('savvy_profile',JSON.stringify(P))}catch(e){}};saveProfile();
-const validProfile=()=>!!(P.confirmed&&P.username);
+const validProfile=()=>true;
 const UNK='USUARIODESCONHECIDO';
 const who=(n,a)=>[n&&n!=='Sem nome'?n:'',a?a+' anos':''].filter(Boolean).join(' · ');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -165,7 +165,7 @@ const isDark=()=>theme==='dark'||(theme==='auto'&&matchMedia('(prefers-color-sch
 function applyTheme(){const r=document.documentElement;theme==='auto'?r.removeAttribute('data-theme'):r.setAttribute('data-theme',theme);$('#theme').textContent=isDark()?'Modo claro':'Modo escuro'}
 $('#theme').onclick=()=>{theme=isDark()?'light':'dark';try{localStorage.setItem('savvy_theme',theme)}catch(e){}applyTheme()};
 applyTheme();
-const syncTop=()=>{const busy=!!(S&&!S.finished);$('#btn-rank').disabled=busy;const a=$('#btn-acc');a.disabled=busy;a.textContent=P.confirmed?'@'+(P.username.length>14?P.username.slice(0,13)+'…':P.username):'Entrar'};
+const syncTop=()=>{const busy=!!(S&&!S.finished);$('#btn-rank').disabled=busy;const a=$('#btn-acc');a.disabled=busy;a.textContent=(P.confirmed&&!P.guest&&P.username)?((P.name&&P.name.trim())||'@'+P.username).slice(0,16):'Entrar'};
 $('#btn-acc').onclick=()=>account();
 $('#btn-rank').onclick=()=>ranking({tab:'geral'});
 
@@ -175,28 +175,6 @@ const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(M
 const toast=m=>{const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,3200)};
 const norm=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 
-function idBox(){
-  const b=$('#idbox');
-  if(P.confirmed){
-    b.innerHTML=`<div class="idcard"><div><b>@${esc(P.username)}</b><br><span class="muted small">${esc(who(P.name,P.age)||'Sem nome nem idade informados')}</span></div><button class="btn ghost" id="idedit">Alterar</button></div>`;
-    $('#idedit').onclick=()=>{P.confirmed=false;saveProfile();home()};return}
-  b.innerHTML=`<input class="field" id="puser" maxlength="20" placeholder="Username único (ex.: joao_77)" autocomplete="username" autocapitalize="none" aria-label="Username"><div class="profile" style="margin-top:8px"><input class="field" id="pname" maxlength="24" placeholder="Nome (pode repetir)" autocomplete="nickname" aria-label="Nome"><input class="field" id="page" type="number" inputmode="numeric" min="6" max="110" placeholder="Idade" aria-label="Idade"></div>
-  <p class="muted small" style="margin-top:8px">O username é só seu e não pode repetir. Nome e idade podem. Se deixar o username em branco, você joga como ${UNK} + um número.</p>
-  <div class="actions" style="margin-top:8px"><button class="btn" id="idok">Confirmar identificação</button></div><p class="small" id="idmsg" role="status"></p>`;
-  $('#puser').value=P.username&&!P.username.startsWith(UNK)?P.username:'';$('#pname').value=P.name||'';$('#page').value=P.age||'';
-  $('#idok').onclick=confirmId;
-}
-async function confirmId(){
-  const u=$('#puser').value.trim(), n=$('#pname').value.trim(), a=$('#page').value.trim(), msg=m=>{$('#idmsg').textContent=m};
-  if(n&&n.length<2)return msg('O nome precisa ter pelo menos 2 letras.');
-  if(a&&!(+a>=6&&+a<=110))return msg('A idade deve estar entre 6 e 110.');
-  if(u&&!/^[A-Za-z0-9_.-]{3,20}$/.test(u))return msg('Username: de 3 a 20 caracteres, só letras, números, _ . e -');
-  if(/^usuariodesconhecido/i.test(u))return msg('Esse tipo de username é reservado.');
-  $('#idok').disabled=true;msg('Confirmando…');
-  const r=await registerPlayer(u,n,a);
-  if(r.err){$('#idok').disabled=false;return msg(r.err)}
-  P={...P,username:r.username,name:n,age:a,confirmed:true};saveProfile();toast('Identificação confirmada: '+r.username);home();
-}
 async function registerPlayer(u,n,a){
   if(online){
     try{
@@ -213,38 +191,65 @@ async function registerPlayer(u,n,a){
   return{username:UNK+c};
 }
 const rpcUrl=f=>CFG.supabaseUrl.replace(/\/$/,'')+'/rest/v1/rpc/'+f;
+const isIn=()=>!!(P.confirmed&&!P.guest&&P.username);
+const shown=()=>(P.name&&P.name.trim())||'@'+P.username;
 function account(){
   syncTop();const back=()=>S&&S.finished?result():home();
-  if(P.confirmed){
-    app.innerHTML=`<div class="eyebrow">Sua conta</div><h2>@${esc(P.username)}</h2><p class="muted">${esc(who(P.name,P.age)||'Sem nome nem idade informados')}</p>
-    ${online?`<h3>Senha</h3><p class="muted small">Opcional. Crie uma senha para entrar com este username em outro aparelho, pelo botão Entrar no topo. Se já tiver uma, salvar de novo troca a senha.</p><input class="field" id="apw" type="password" minlength="6" maxlength="72" placeholder="Senha (mínimo 6 caracteres)" autocomplete="new-password"><div class="actions" style="margin-top:8px"><button class="btn" id="apsave">Salvar senha</button></div>`:'<p class="muted small">O login com senha só funciona quando o ranking online está ligado.</p>'}
+  if(isIn()){
+    app.innerHTML=`<div class="eyebrow">Sua conta</div><h2>${esc(shown())}</h2><p class="muted">@${esc(P.username)}${who(P.name,P.age)?' · '+esc(who(P.name,P.age)):''}</p>
+    ${online?`<h3>Senha</h3><p class="muted small">Para entrar com este username em outro aparelho. Se já tiver uma, salvar de novo troca a senha.</p><input class="field" id="apw" type="password" minlength="6" maxlength="72" placeholder="Senha (mínimo 6 caracteres)" autocomplete="new-password"><div class="actions" style="margin-top:8px"><button class="btn" id="apsave">Salvar senha</button></div>`:''}
     <p class="small" id="amsg" role="status"></p>
     <div class="actions"><button class="btn ghost" id="alogout">Sair deste aparelho</button><button class="btn ghost" id="aback">Voltar</button></div>`;
     $('#aback').onclick=back;
     $('#alogout').onclick=()=>{
       if(!confirm(P.hasPw?'Sair deste aparelho? Você poderá entrar de novo com username e senha.':'Você ainda não criou uma senha. Se sair, não conseguirá recuperar @'+P.username+'. Sair mesmo assim?'))return;
-      P={name:'',age:'',username:'',token:newToken(),confirmed:false,hasPw:false};saveProfile();S=null;toast('Você saiu da conta.');home()};
+      P={name:'',age:'',username:'',token:newToken(),confirmed:false,guest:false,hasPw:false};saveProfile();S=null;toast('Você saiu da conta.');home()};
     const sv=$('#apsave');if(sv)sv.onclick=async()=>{
       const pw=$('#apw').value,m=x=>{$('#amsg').textContent=x};
       if(pw.length<6)return m('A senha precisa ter pelo menos 6 caracteres.');
       sv.disabled=true;m('Salvando…');
       try{const r=await fetch(rpcUrl('set_password'),{method:'POST',headers:hdr(),body:JSON.stringify({p_username:P.username,p_token:P.token,p_password:pw})});
-        if(r.ok){P.hasPw=true;saveProfile();$('#apw').value='';m('Senha salva. Agora você pode entrar de outro aparelho.')}else m('Não foi possível salvar a senha agora.')}
+        if(r.ok){P.hasPw=true;saveProfile();$('#apw').value='';m('Senha salva.')}else m('Não foi possível salvar a senha agora.')}
       catch(e){m('Sem conexão com o servidor.')}sv.disabled=false};
     return}
-  app.innerHTML=`<div class="eyebrow">Entrar</div><h2>Já tem username e senha?</h2><p class="muted small">Entrar é opcional: você pode jogar sem login. Serve para usar o mesmo username em outro aparelho (a senha é criada em Sua conta, depois de confirmar a identificação).</p>
-  ${online?`<input class="field" id="lu" maxlength="20" placeholder="Username" autocomplete="username" autocapitalize="none"><input class="field" id="lp" type="password" maxlength="72" placeholder="Senha" autocomplete="current-password" style="margin-top:8px"><div class="actions" style="margin-top:8px"><button class="btn" id="lgo">Entrar</button></div>`:'<p class="muted small">O login só funciona quando o ranking online está ligado.</p>'}
+  const mode2=account.m||'login';
+  app.innerHTML=`<div class="eyebrow">Conta</div><h2>${mode2==='login'?'Entrar':'Criar conta'}</h2>
+  <p class="muted small">Entrar é opcional: sem conta você joga como visitante e suas pontuações aparecem no ranking como USUARIODESCONHECIDO + número.</p>
+  <div class="tabs"><button class="tab" data-m="login" aria-pressed="${mode2==='login'}">Entrar</button><button class="tab" data-m="new" aria-pressed="${mode2==='new'}">Criar conta</button></div>
+  ${mode2==='login'?`<input class="field" id="lu" maxlength="20" placeholder="Username" autocomplete="username" autocapitalize="none"><input class="field" id="lp" type="password" maxlength="72" placeholder="Senha" autocomplete="current-password">`
+  :`<input class="field" id="lu" maxlength="20" placeholder="Username único (ex.: joao_77)" autocomplete="username" autocapitalize="none"><input class="field" id="lp" type="password" maxlength="72" placeholder="Senha (mínimo 6 caracteres)" autocomplete="new-password"><div class="profile"><input class="field" id="ln" maxlength="24" placeholder="Nome (opcional, pode repetir)" autocomplete="nickname"><input class="field" id="la" type="number" inputmode="numeric" min="6" max="110" placeholder="Idade"></div>`}
+  <div class="actions"><button class="btn" id="lgo">${mode2==='login'?'Entrar':'Criar conta'}</button></div>
   <p class="small" id="lmsg" role="status"></p><div class="actions"><button class="btn ghost" id="aback">Voltar</button></div>`;
   $('#aback').onclick=back;
-  const go=$('#lgo');if(go)go.onclick=async()=>{
-    const u=$('#lu').value.trim(),pw=$('#lp').value,m=x=>{$('#lmsg').textContent=x};
+  document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{account.m=b.dataset.m;account()});
+  const m=x=>{$('#lmsg').textContent=x}, go=$('#lgo');
+  if(!online){go.disabled=true;m('O ranking online ainda não foi ligado, então não há contas.')}
+  go.onclick=async()=>{
+    const u=$('#lu').value.trim(),pw=$('#lp').value;
     if(!u||!pw)return m('Preencha username e senha.');
-    go.disabled=true;m('Entrando…');
-    try{const r=await fetch(rpcUrl('login_player'),{method:'POST',headers:hdr(),body:JSON.stringify({p_username:u,p_password:pw,p_token:P.token})});
-      const j=r.ok?await r.json():null;
-      if(j&&j.ok){P={...P,username:j.username,name:j.name||'',age:j.age||'',confirmed:true,hasPw:true};saveProfile();toast('Bem-vindo, @'+j.username);home();return}
-      m(j&&j.error==='locked'?'Muitas tentativas erradas. Tente de novo em 5 minutos.':j?'Username ou senha incorretos.':'Não foi possível entrar agora.')}
-    catch(e){m('Sem conexão com o servidor.')}go.disabled=false};
+    go.disabled=true;
+    if(mode2==='login'){
+      m('Entrando…');
+      try{const r=await fetch(rpcUrl('login_player'),{method:'POST',headers:hdr(),body:JSON.stringify({p_username:u,p_password:pw,p_token:P.token})});
+        const j=r.ok?await r.json():null;
+        if(j&&j.ok){P={...P,username:j.username,name:j.name||'',age:j.age||'',confirmed:true,guest:false,hasPw:true};saveProfile();toast('Bem-vindo, '+shown());home();return}
+        m(j&&j.error==='locked'?'Muitas tentativas erradas. Tente de novo em 5 minutos.':j?'Username ou senha incorretos.':'Não foi possível entrar agora.')}
+      catch(e){m('Sem conexão com o servidor.')}
+    }else{
+      const n=$('#ln').value.trim(),a=$('#la').value.trim();
+      if(!/^[A-Za-z0-9_.-]{3,20}$/.test(u)){go.disabled=false;return m('Username: de 3 a 20 caracteres, só letras, números, _ . e -')}
+      if(/^usuariodesconhecido/i.test(u)){go.disabled=false;return m('Esse tipo de username é reservado.')}
+      if(pw.length<6){go.disabled=false;return m('A senha precisa ter pelo menos 6 caracteres.')}
+      if(n&&n.length<2){go.disabled=false;return m('O nome precisa ter pelo menos 2 letras.')}
+      if(a&&!(+a>=6&&+a<=110)){go.disabled=false;return m('A idade deve estar entre 6 e 110.')}
+      m('Criando…');
+      const r=await registerPlayer(u,n,a);
+      if(r.err){go.disabled=false;return m(r.err)}
+      try{const s=await fetch(rpcUrl('set_password'),{method:'POST',headers:hdr(),body:JSON.stringify({p_username:r.username,p_token:P.token,p_password:pw})});
+        P={...P,username:r.username,name:n,age:a,confirmed:true,guest:false,hasPw:s.ok};saveProfile();toast('Conta criada: '+shown());home();return}
+      catch(e){m('Conta criada, mas não foi possível salvar a senha. Abra sua conta e tente de novo.');P={...P,username:r.username,name:n,age:a,confirmed:true,guest:false,hasPw:false};saveProfile()}
+    }
+    go.disabled=false};
 }
 function home(){
   S=null;
@@ -252,29 +257,25 @@ function home(){
   <div class="eyebrow">Teste de conhecimento adaptativo</div>
   <h1>SAVVY</h1>
   <h2>Quanto você sabe do que diz gostar?</h2>
-  <p class="muted">Escolha a profundidade e até ${MAX_PICK} temas. As perguntas vêm misturadas e cada uma é mais difícil que a anterior. No Difícil, as 4 últimas de cada tema são nível especialista, quase impossíveis. Cada erro custa uma vida do tema, e sem vidas ele sai da rodada. No fim, você vê a porcentagem de cada assunto.</p>
-  <div class="eyebrow">Quem está jogando?</div>
-  <div id="idbox"></div>
+  <p class="muted">Escolha a profundidade e até ${MAX_PICK} temas. As perguntas vêm misturadas e cada uma é mais difícil que a anterior. Cada erro custa uma vida do tema, e sem vidas ele sai da rodada. No fim, você vê a porcentagem de cada assunto.</p>
+  ${isIn()?`<p class="muted">Jogando como <b>${esc(shown())}</b></p>`:''}
   <div class="eyebrow">Até qual nível você quer chegar?</div>
   <div class="modes" id="modes"></div>
   <div class="bar-top"><span class="eyebrow">Temas</span><span class="mono" id="cnt"></span></div>
   <input class="search" id="search" type="search" placeholder="Buscar tema" aria-label="Buscar tema" autocomplete="off">
   <div class="grid" id="grid"></div>
   <div class="actions"><button class="btn" id="go">Começar</button></div>
-  <button class="link" id="reset">Zerar a lista de perguntas já vistas</button>
   <button class="link" id="upd">Verificar atualizações · versão ${BUILD}</button>`;
   const m=$('#modes');
   Object.entries(MODES).forEach(([n,[t,d]])=>{
     const b=document.createElement('button');b.className='mode';b.dataset.n=n;
-    b.innerHTML=`<b>${t}</b><span>${d}</span>`;
+    b.innerHTML=`<b>${t}</b>`;
     b.onclick=()=>{mode=+n;paint()};m.appendChild(b)});
-  idBox();
   syncTop();
   $('#search').value=filter;
   $('#search').oninput=e=>{filter=e.target.value;grid()};
   $('#go').onclick=start;
   $('#upd').onclick=()=>checkUpdate(true);
-  $('#reset').onclick=()=>{seen=new Set();saveSeen();toast('Lista zerada. Todas as perguntas voltam a aparecer.')};
   grid();
 }
 function grid(){
@@ -291,7 +292,7 @@ function paint(){
   document.querySelectorAll('.cat').forEach(b=>{const on=picked.includes(b.dataset.k);b.setAttribute('aria-pressed',on);b.disabled=!on&&picked.length>=MAX_PICK});
   document.querySelectorAll('.mode').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.n===mode));
   $('#cnt').textContent=`${picked.length}/${MAX_PICK}`;$('#go').disabled=!picked.length||!validProfile();
-  $('#go').textContent=validProfile()?'Começar':'Confirme sua identificação para começar';
+  $('#go').textContent='Começar';
 }
 
 function start(){
@@ -392,7 +393,10 @@ function result(){
   $('#rk').onclick=()=>ranking({tab:'assunto',k:sorted[0],m:mode});
   if(!S.submitted){S.submitted=true;
     const rows=ks.map(k=>({topic:k,mode,pct:pct(k),title:titleFor(k,pct(k))}));
-    submitScores(rows).then(st=>{const el=$('#sync');if(el)el.textContent=st==='online'?'Pontuação enviada ao ranking online.':st==='local'?'Pontuação salva neste aparelho. O ranking online ainda não foi ligado.':'Não foi possível enviar ao ranking online agora.'})}
+    (async()=>{
+      if(!P.confirmed||!P.username){const r=await registerPlayer('','','');if(!r.err){P={...P,username:r.username,name:'',age:'',confirmed:true,guest:true};saveProfile();syncTop()}}
+      const st=P.confirmed?await submitScores(rows):'erro';
+      const el=$('#sync');if(el)el.textContent=st==='online'?`Pontuação enviada ao ranking online${P.guest?' como '+P.username:''}.`:st==='local'?'Pontuação salva neste aparelho. O ranking online ainda não foi ligado.':'Não foi possível enviar ao ranking online agora.'})()}
   else $('#sync').textContent='Pontuação já registrada no ranking.';
   requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelectorAll('.fill').forEach(f=>f.style.width=f.dataset.w+'%')));
   $('#again').onclick=start;$('#new').onclick=home;
