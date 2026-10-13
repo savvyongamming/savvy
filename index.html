@@ -130,7 +130,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline
 </head>
 <body>
 <div class="shell">
-<header class="top"><button class="tb" id="btn-rank">Ranking</button><button class="tb" id="theme">Modo escuro</button></header>
+<header class="top"><button class="tb" id="btn-acc">Entrar</button><button class="tb" id="btn-rank">Ranking</button><button class="tb" id="theme">Modo escuro</button></header>
 <div id="updbar"></div>
 <main id="app"></main>
 </div>
@@ -143,7 +143,7 @@ const BANK={"mat":{"n":"Matemática","d":"Contas, geometria e cálculo","q":[[1,
 
 /* modo: [nome, descrição, perguntas por tema, erros permitidos antes de sair do tema] */
 const MODES={4:['Fácil','5 fáceis + 1 média · 4 vidas',6,4],7:['Médio','10 médias + 5 difíceis · 3 vidas',15,3],10:['Difícil','16 difíceis + 4 de especialista · 2 vidas',20,2]};
-const MAX_PICK=5, SEEN_KEY='qvs_seen_v2', BUILD='a5b9c3e';
+const MAX_PICK=5, SEEN_KEY='qvs_seen_v2', BUILD='4b34ecb';
 /* Dificuldade planejada (1-10) de cada pergunta, sempre subindo. */
 const lin=(a,b,n)=>Array.from({length:n},(_,i)=>+(a+(b-a)*i/(n-1)).toFixed(2));
 const PLANS={4:[...lin(1,3,5),5],7:[...lin(4,6,10),...lin(7,8.5,5)],10:[...lin(7,8.5,16),9,9.5,10,10]};
@@ -165,7 +165,8 @@ const isDark=()=>theme==='dark'||(theme==='auto'&&matchMedia('(prefers-color-sch
 function applyTheme(){const r=document.documentElement;theme==='auto'?r.removeAttribute('data-theme'):r.setAttribute('data-theme',theme);$('#theme').textContent=isDark()?'Modo claro':'Modo escuro'}
 $('#theme').onclick=()=>{theme=isDark()?'light':'dark';try{localStorage.setItem('savvy_theme',theme)}catch(e){}applyTheme()};
 applyTheme();
-const syncTop=()=>{$('#btn-rank').disabled=!!(S&&!S.finished)};
+const syncTop=()=>{const busy=!!(S&&!S.finished);$('#btn-rank').disabled=busy;const a=$('#btn-acc');a.disabled=busy;a.textContent=P.confirmed?'@'+(P.username.length>14?P.username.slice(0,13)+'…':P.username):'Entrar'};
+$('#btn-acc').onclick=()=>account();
 $('#btn-rank').onclick=()=>ranking({tab:'geral'});
 
 try{seen=new Set(JSON.parse(localStorage.getItem(SEEN_KEY)||'[]'))}catch(e){}
@@ -210,6 +211,40 @@ async function registerPlayer(u,n,a){
   if(P.username&&P.username.startsWith(UNK))return{username:P.username};
   let c=0;try{c=+localStorage.getItem('savvy_unk')||0}catch(e){}c++;try{localStorage.setItem('savvy_unk',c)}catch(e){}
   return{username:UNK+c};
+}
+const rpcUrl=f=>CFG.supabaseUrl.replace(/\/$/,'')+'/rest/v1/rpc/'+f;
+function account(){
+  syncTop();const back=()=>S&&S.finished?result():home();
+  if(P.confirmed){
+    app.innerHTML=`<div class="eyebrow">Sua conta</div><h2>@${esc(P.username)}</h2><p class="muted">${esc(who(P.name,P.age)||'Sem nome nem idade informados')}</p>
+    ${online?`<h3>Senha</h3><p class="muted small">Opcional. Crie uma senha para entrar com este username em outro aparelho, pelo botão Entrar no topo. Se já tiver uma, salvar de novo troca a senha.</p><input class="field" id="apw" type="password" minlength="6" maxlength="72" placeholder="Senha (mínimo 6 caracteres)" autocomplete="new-password"><div class="actions" style="margin-top:8px"><button class="btn" id="apsave">Salvar senha</button></div>`:'<p class="muted small">O login com senha só funciona quando o ranking online está ligado.</p>'}
+    <p class="small" id="amsg" role="status"></p>
+    <div class="actions"><button class="btn ghost" id="alogout">Sair deste aparelho</button><button class="btn ghost" id="aback">Voltar</button></div>`;
+    $('#aback').onclick=back;
+    $('#alogout').onclick=()=>{
+      if(!confirm(P.hasPw?'Sair deste aparelho? Você poderá entrar de novo com username e senha.':'Você ainda não criou uma senha. Se sair, não conseguirá recuperar @'+P.username+'. Sair mesmo assim?'))return;
+      P={name:'',age:'',username:'',token:newToken(),confirmed:false,hasPw:false};saveProfile();S=null;toast('Você saiu da conta.');home()};
+    const sv=$('#apsave');if(sv)sv.onclick=async()=>{
+      const pw=$('#apw').value,m=x=>{$('#amsg').textContent=x};
+      if(pw.length<6)return m('A senha precisa ter pelo menos 6 caracteres.');
+      sv.disabled=true;m('Salvando…');
+      try{const r=await fetch(rpcUrl('set_password'),{method:'POST',headers:hdr(),body:JSON.stringify({p_username:P.username,p_token:P.token,p_password:pw})});
+        if(r.ok){P.hasPw=true;saveProfile();$('#apw').value='';m('Senha salva. Agora você pode entrar de outro aparelho.')}else m('Não foi possível salvar a senha agora.')}
+      catch(e){m('Sem conexão com o servidor.')}sv.disabled=false};
+    return}
+  app.innerHTML=`<div class="eyebrow">Entrar</div><h2>Já tem username e senha?</h2><p class="muted small">Entrar é opcional: você pode jogar sem login. Serve para usar o mesmo username em outro aparelho (a senha é criada em Sua conta, depois de confirmar a identificação).</p>
+  ${online?`<input class="field" id="lu" maxlength="20" placeholder="Username" autocomplete="username" autocapitalize="none"><input class="field" id="lp" type="password" maxlength="72" placeholder="Senha" autocomplete="current-password" style="margin-top:8px"><div class="actions" style="margin-top:8px"><button class="btn" id="lgo">Entrar</button></div>`:'<p class="muted small">O login só funciona quando o ranking online está ligado.</p>'}
+  <p class="small" id="lmsg" role="status"></p><div class="actions"><button class="btn ghost" id="aback">Voltar</button></div>`;
+  $('#aback').onclick=back;
+  const go=$('#lgo');if(go)go.onclick=async()=>{
+    const u=$('#lu').value.trim(),pw=$('#lp').value,m=x=>{$('#lmsg').textContent=x};
+    if(!u||!pw)return m('Preencha username e senha.');
+    go.disabled=true;m('Entrando…');
+    try{const r=await fetch(rpcUrl('login_player'),{method:'POST',headers:hdr(),body:JSON.stringify({p_username:u,p_password:pw,p_token:P.token})});
+      const j=r.ok?await r.json():null;
+      if(j&&j.ok){P={...P,username:j.username,name:j.name||'',age:j.age||'',confirmed:true,hasPw:true};saveProfile();toast('Bem-vindo, @'+j.username);home();return}
+      m(j&&j.error==='locked'?'Muitas tentativas erradas. Tente de novo em 5 minutos.':j?'Username ou senha incorretos.':'Não foi possível entrar agora.')}
+    catch(e){m('Sem conexão com o servidor.')}go.disabled=false};
 }
 function home(){
   S=null;
