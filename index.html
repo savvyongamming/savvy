@@ -143,7 +143,7 @@ const BANK={"mat":{"n":"Matemática","d":"Contas, geometria e cálculo","q":[[1,
 
 /* modo: [nome, descrição, perguntas por tema, erros permitidos antes de sair do tema] */
 const MODES={4:['Fácil','5 fáceis + 1 média · 4 vidas',6,4],7:['Médio','10 médias + 5 difíceis · 3 vidas',15,3],10:['Difícil','16 difíceis + 4 de especialista · 2 vidas',20,2]};
-const MAX_PICK=5, SEEN_KEY='qvs_seen_v2', BUILD='46d014d';
+const MAX_PICK=5, SEEN_KEY='qvs_seen_v2', BUILD='e9d1a8d';
 /* Dificuldade planejada (1-10) de cada pergunta, sempre subindo. */
 const lin=(a,b,n)=>Array.from({length:n},(_,i)=>+(a+(b-a)*i/(n-1)).toFixed(2));
 const PLANS={4:[...lin(1,3,5),5],7:[...lin(4,6,10),...lin(7,8.5,5)],10:[...lin(7,8.5,16),9,9.5,10,10]};
@@ -424,7 +424,7 @@ async function fetchRows(force){
   let rows=[];
   if(online){
     for(let off=0;off<10000;off+=1000){
-      const r=await fetch(`${tbl()}?select=id,name,age,topic,mode,pct,title,created_at&order=id.desc&limit=1000&offset=${off}`,{headers:hdr()});
+      const r=await fetch(`${tbl()}?select=id,username,name,age,topic,mode,pct,title,created_at&order=id.desc&limit=1000&offset=${off}`,{headers:hdr()});
       if(!r.ok)throw new Error('http '+r.status);
       const part=await r.json();rows=rows.concat(part);if(part.length<1000)break}
   }else{try{rows=JSON.parse(localStorage.getItem('savvy_local_scores')||'[]')}catch(e){}}
