@@ -143,7 +143,7 @@ const BANK={"mat":{"n":"Matemática","d":"Contas, geometria e cálculo","q":[[1,
 
 /* modo: [nome, descrição, perguntas por tema, erros permitidos antes de sair do tema] */
 const MODES={4:['Fácil','5 fáceis + 1 média · 4 vidas',6,4],7:['Médio','10 médias + 5 difíceis · 3 vidas',15,3],10:['Difícil','16 difíceis + 4 de especialista · 2 vidas',20,2]};
-const MAX_PICK=5, SEEN_KEY='qvs_seen_v2', BUILD='7f84703';
+const MAX_PICK=5, SEEN_KEY='qvs_seen_v2', BUILD='b040d1a';
 /* Dificuldade planejada (1-10) de cada pergunta, sempre subindo. */
 const lin=(a,b,n)=>Array.from({length:n},(_,i)=>+(a+(b-a)*i/(n-1)).toFixed(2));
 const PLANS={4:[...lin(1,3,5),5],7:[...lin(4,6,10),...lin(7,8.5,5)],10:[...lin(7,8.5,16),9,9.5,10,10]};
@@ -156,6 +156,7 @@ if(!P.token||P.token.length<16)P.token=newToken();
 const saveProfile=()=>{try{localStorage.setItem('savvy_profile',JSON.stringify(P))}catch(e){}};saveProfile();
 const validProfile=()=>true;
 const UNK='USUARIODESCONHECIDO';
+const lab=u=>{if(/^USUARIODESCONHECIDO-antigo/i.test(u||''))return 'Sem Nome (antigo)';const m=/^USUARIODESCONHECIDO(\d+)$/i.exec(u||'');return m?(+m[1]===1?'Sem Nome':'Sem Nome '+m[1]):'@'+u};
 const who=(n,a)=>[n&&n!=='Sem nome'?n:'',a?a+' anos':''].filter(Boolean).join(' · ');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -192,7 +193,7 @@ async function registerPlayer(u,n,a){
 }
 const rpcUrl=f=>CFG.supabaseUrl.replace(/\/$/,'')+'/rest/v1/rpc/'+f;
 const isIn=()=>!!(P.confirmed&&!P.guest&&P.username);
-const shown=()=>(P.name&&P.name.trim())||'@'+P.username;
+const shown=()=>(P.name&&P.name.trim())||lab(P.username);
 function account(){
   syncTop();const back=()=>S&&S.finished?result():home();
   if(isIn()){
@@ -396,7 +397,7 @@ function result(){
     (async()=>{
       if(!P.confirmed||!P.username){const r=await registerPlayer('','','');if(!r.err){P={...P,username:r.username,name:'',age:'',confirmed:true,guest:true};saveProfile();syncTop()}}
       const st=P.confirmed?await submitScores(rows):'erro';
-      const el=$('#sync');if(el)el.textContent=st==='online'?`Pontuação enviada ao ranking online${P.guest?' como '+P.username:''}.`:st==='local'?'Pontuação salva neste aparelho. O ranking online ainda não foi ligado.':'Não foi possível enviar ao ranking online agora.'})()}
+      const el=$('#sync');if(el)el.textContent=st==='online'?`Pontuação enviada ao ranking online${P.guest?' como '+lab(P.username):''}.`:st==='local'?'Pontuação salva neste aparelho. O ranking online ainda não foi ligado.':'Não foi possível enviar ao ranking online agora.'})()}
   else $('#sync').textContent='Pontuação já registrada no ranking.';
   requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelectorAll('.fill').forEach(f=>f.style.width=f.dataset.w+'%')));
   $('#again').onclick=start;$('#new').onclick=home;
@@ -432,7 +433,7 @@ async function fetchRows(force){
 function aggregate(rows){
   const m=new Map();
   for(const r of rows){
-    const un=String(r.username||r.name||'').trim(),key=un.toLowerCase();if(!key||!BANK[r.topic]||!W[r.mode])continue;
+    let un=String(r.username||'').trim();if(!un){const nm=String(r.name||'').trim();un=/^sem nome$/i.test(nm)?'USUARIODESCONHECIDO-antigo'+(r.id||Math.random()):nm}const key=un.toLowerCase();if(!key||!BANK[r.topic]||!W[r.mode])continue;
     let p=m.get(key);if(!p){p={key,user:un,name:String(r.name||'').trim(),age:r.age,last:r.created_at,rounds:0,t:new Map()};m.set(key,p)}
     if(r.created_at>p.last){p.last=r.created_at;p.age=r.age;p.name=String(r.name||'').trim();p.user=un}
     p.rounds++;
@@ -471,7 +472,7 @@ async function ranking(o){
     const draw=()=>{
       const q=norm((RK.q||'').trim());
       const list=players.slice().sort((a,b)=>b.points-a.points||b.topics.length-a.topics.length||a.user.localeCompare(b.user)).map((p,i)=>({p,i:i+1})).filter(x=>!q||norm(x.p.user).includes(q)||norm(x.p.name).includes(q));
-      $('#list').innerHTML=list.length?`<ol class="rank">${list.slice(0,RK.lim||50).map(({p,i})=>`<li class="go ${p.key===me?'me':''}" data-k="${esc(p.key)}"><span class="pos mono">${i}</span><span class="nm"><button class="nm"><b>@${esc(p.user)}</b></button> <small class="muted">${esc(who(p.name,p.age))}${who(p.name,p.age)?' · ':''}${p.topics.length} tema${p.topics.length===1?'':'s'}</small></span><span class="badge">${esc(p.topics[0]?pname(p.topics[0].topic):'')}</span><span class="mono">${p.points}</span></li>`).join('')}</ol>${list.length>(RK.lim||50)?'<div class="actions"><button class="btn ghost" id="more">Mostrar mais</button></div>':''}`:'<p class="muted">Nenhum jogador encontrado.</p>';
+      $('#list').innerHTML=list.length?`<ol class="rank">${list.slice(0,RK.lim||50).map(({p,i})=>`<li class="go ${p.key===me?'me':''}" data-k="${esc(p.key)}"><span class="pos mono">${i}</span><span class="nm"><button class="nm"><b>${esc(lab(p.user))}</b></button> <small class="muted">${esc(who(p.name,p.age))}${who(p.name,p.age)?' · ':''}${p.topics.length} tema${p.topics.length===1?'':'s'}</small></span><span class="badge">${esc(p.topics[0]?pname(p.topics[0].topic):'')}</span><span class="mono">${p.points}</span></li>`).join('')}</ol>${list.length>(RK.lim||50)?'<div class="actions"><button class="btn ghost" id="more">Mostrar mais</button></div>':''}`:'<p class="muted">Nenhum jogador encontrado.</p>';
       bindRows();const mo=$('#more');if(mo)mo.onclick=()=>{RK.lim=(RK.lim||50)+50;draw()};
     };
     $('#board').className='';
@@ -484,7 +485,7 @@ async function ranking(o){
     $('#board').innerHTML=`<p class="muted small">Quem é bom em cada assunto. Escolha o tema e, se quiser, um nível específico. "Todos" combina os níveis (Fácil 40%, Médio 70%, Difícil 100%).</p>
     <select class="field" id="rk-topic" aria-label="Tema">${keys.map(x=>`<option value="${x}" ${x===k?'selected':''}>${esc(BANK[x].n)}</option>`).join('')}</select>
     <div class="modes" id="rk-modes" style="grid-template-columns:repeat(4,1fr);margin-block:10px">${[[0,'Todos'],...Object.entries(MN)].map(([n,v])=>`<button class="mode" data-n="${n}" aria-pressed="${+n===m}"><b>${v}</b></button>`).join('')}</div>
-    ${list.length?`<ol class="rank">${list.slice(0,100).map((x,i)=>`<li class="go ${x.p.key===me?'me':''}" data-k="${esc(x.p.key)}"><span class="pos mono">${i+1}</span><span class="nm"><button class="nm"><b>@${esc(x.p.user)}</b></button> <small class="muted">${esc(who(x.p.name,x.p.age))}${who(x.p.name,x.p.age)?' · ':''}${x.t.rounds} rodada${x.t.rounds===1?'':'s'}</small></span><span class="badge">${esc(x.title)}</span><span class="mono">${x.v}%</span></li>`).join('')}</ol>`:'<p class="muted">Ninguém pontuou neste tema e nível ainda. Seja o primeiro.</p>'}`;
+    ${list.length?`<ol class="rank">${list.slice(0,100).map((x,i)=>`<li class="go ${x.p.key===me?'me':''}" data-k="${esc(x.p.key)}"><span class="pos mono">${i+1}</span><span class="nm"><button class="nm"><b>${esc(lab(x.p.user))}</b></button> <small class="muted">${esc(who(x.p.name,x.p.age))}${who(x.p.name,x.p.age)?' · ':''}${x.t.rounds} rodada${x.t.rounds===1?'':'s'}</small></span><span class="badge">${esc(x.title)}</span><span class="mono">${x.v}%</span></li>`).join('')}</ol>`:'<p class="muted">Ninguém pontuou neste tema e nível ainda. Seja o primeiro.</p>'}`;
     $('#rk-topic').onchange=e=>ranking({tab,k:e.target.value});
     document.querySelectorAll('#rk-modes .mode').forEach(b=>b.onclick=()=>ranking({tab,m:+b.dataset.n}));
     bindRows();
@@ -495,7 +496,7 @@ function profile(key){
   const strong=p.topics.slice(0,3);
   app.innerHTML=`
   <div class="eyebrow">Perfil do jogador</div>
-  <h2>@${esc(p.user)}</h2><p class="muted">${esc(who(p.name,p.age)||'Sem nome nem idade informados')}</p>
+  <h2>${esc(lab(p.user))}</h2><p class="muted">${esc(who(p.name,p.age)||(/^USUARIODESCONHECIDO/i.test(p.user)?'Visitante, sem conta':'Sem nome nem idade informados'))}</p>
   <div class="tiles"><div class="tile"><b>${p.points}</b><span>pontos no ranking geral</span></div><div class="tile"><b>${p.topics.length}</b><span>temas jogados</span></div><div class="tile"><b>${p.avg}%</b><span>média nos temas jogados</span></div><div class="tile"><b>${p.rounds}</b><span>rodadas de tema</span></div></div>
   <h3>É bom em</h3>
   <div class="chips">${strong.map(t=>`<span class="chip"><b>${esc(pname(t.topic))}</b> <span class="muted">${Math.round(t.s)}% · ${esc(t.title)}</span></span>`).join('')}</div>
