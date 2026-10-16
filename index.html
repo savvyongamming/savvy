@@ -143,7 +143,7 @@ const BANK={"mat":{"n":"Matemática","d":"Contas, geometria e cálculo","q":[[1,
 
 /* modo: [nome, descrição, perguntas por tema, erros permitidos antes de sair do tema] */
 const MODES={4:['Fácil','5 fáceis + 1 média · 4 vidas',6,4],7:['Médio','10 médias + 5 difíceis · 3 vidas',15,3],10:['Difícil','16 difíceis + 4 de especialista · 2 vidas',20,2]};
-const MAX_PICK=5, SEEN_KEY='qvs_seen_v2', BUILD='b040d1a';
+const MAX_PICK=5, SEEN_KEY='qvs_seen_v2', BUILD='46d014d';
 /* Dificuldade planejada (1-10) de cada pergunta, sempre subindo. */
 const lin=(a,b,n)=>Array.from({length:n},(_,i)=>+(a+(b-a)*i/(n-1)).toFixed(2));
 const PLANS={4:[...lin(1,3,5),5],7:[...lin(4,6,10),...lin(7,8.5,5)],10:[...lin(7,8.5,16),9,9.5,10,10]};
@@ -156,7 +156,7 @@ if(!P.token||P.token.length<16)P.token=newToken();
 const saveProfile=()=>{try{localStorage.setItem('savvy_profile',JSON.stringify(P))}catch(e){}};saveProfile();
 const validProfile=()=>true;
 const UNK='USUARIODESCONHECIDO';
-const lab=u=>{if(/^USUARIODESCONHECIDO-antigo/i.test(u||''))return 'Sem Nome (antigo)';const m=/^USUARIODESCONHECIDO(\d+)$/i.exec(u||'');return m?(+m[1]===1?'Sem Nome':'Sem Nome '+m[1]):'@'+u};
+const lab=u=>/^USUARIODESCONHECIDO\d+$/i.test(u||'')?String(u).toUpperCase():'@'+u;
 const who=(n,a)=>[n&&n!=='Sem nome'?n:'',a?a+' anos':''].filter(Boolean).join(' · ');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -433,7 +433,7 @@ async function fetchRows(force){
 function aggregate(rows){
   const m=new Map();
   for(const r of rows){
-    let un=String(r.username||'').trim();if(!un){const nm=String(r.name||'').trim();un=/^sem nome$/i.test(nm)?'USUARIODESCONHECIDO-antigo'+(r.id||Math.random()):nm}const key=un.toLowerCase();if(!key||!BANK[r.topic]||!W[r.mode])continue;
+    let un=String(r.username||'').trim();if(!un)un=String(r.name||'').trim();const key=un.toLowerCase();if(!key||!BANK[r.topic]||!W[r.mode])continue;
     let p=m.get(key);if(!p){p={key,user:un,name:String(r.name||'').trim(),age:r.age,last:r.created_at,rounds:0,t:new Map()};m.set(key,p)}
     if(r.created_at>p.last){p.last=r.created_at;p.age=r.age;p.name=String(r.name||'').trim();p.user=un}
     p.rounds++;
